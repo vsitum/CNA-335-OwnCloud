@@ -10,3 +10,7 @@ Winter 2021
 Firstly, I have a Raspberry Pi with Raspian (buster) installed and am going to download a web server (Nginx) and Owncloud (Owncloud.org).
 After that, I set up NGINX, tweak PHP for Owncloud and HTTPS, swap Memory, set up a MySQL Database (Mariadb) & user for Owncloud.
 And last thing in this phase will be mounting & setting up a Drive.
+
+
+
+
