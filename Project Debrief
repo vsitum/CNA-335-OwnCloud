@@ -1,1 +1,192 @@
-debrief
+
+
+CNA 335 
+Winter 2021
+ 
+                                              Final Project
+
+
+I have a Raspberry Pi with Raspian (buster) installed. To run the Owncloud software I am going to download a web server (Nginx % PHP) and
+add the www-data user to the www-data group. If Raspbian buster is not running on your Raspberry Pi I am not going to quide you trough that
+upgrading process.
+
+After NGINX installation I needed to sett up and configure it, tweak PHP for Owncloud and HTTPS. I used "sudo nano /etc/nginx/sites-available/default" 
+to configure the web server and copy/paste code:
+
+upstream php-handler {
+    server unix:/var/run/php/php7.3-fpm.sock;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    #Allow letsencrypt through
+    location /.well-known/acme-challenge/ {
+        root /var/www/owncloud;
+    }
+
+    # enforce https
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+  
+server {
+    listen 443 ssl http2;
+    server_name _;
+  
+    ssl_certificate /etc/nginx/cert.pem;
+    ssl_certificate_key /etc/nginx/cert.key;
+
+    ssl_session_timeout 5m;
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+    ssl_ciphers 'ECDHE-RSA-AES128-GCM-SHA256:AES256+EECDH:AES256+EDH';
+    ssl_dhparam /etc/nginx/dh2048.pem;
+    ssl_prefer_server_ciphers on;
+    keepalive_timeout    70;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+  
+    add_header Strict-Transport-Security "max-age=15552000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Robots-Tag none;
+    add_header X-Download-Options noopen;
+    add_header X-Permitted-Cross-Domain-Policies none;
+  
+    root /var/www/owncloud/;
+  
+    location = /robots.txt {
+        allow all;
+        log_not_found off;
+        access_log off;
+    }
+  
+    # The following 2 rules are only needed for the user_webfinger app.
+    # Uncomment it if you're planning to use this app.
+    #rewrite ^/.well-known/host-meta /public.php?service=host-meta last;
+    #rewrite ^/.well-known/host-meta.json /public.php?service=host-meta-json last;
+  
+    location = /.well-known/carddav {
+        return 301 $scheme://$host/remote.php/dav;
+    }
+    location = /.well-known/caldav {
+        return 301 $scheme://$host/remote.php/dav;
+    }
+  
+    # set max upload size
+    client_max_body_size 512M;
+    fastcgi_buffers 8 4K;
+    fastcgi_ignore_headers X-Accel-Buffering;
+  
+    gzip off;
+  
+    error_page 403 /core/templates/403.php;
+    error_page 404 /core/templates/404.php;
+  
+    location / {
+        rewrite ^ /index.php$uri;
+    }
+  
+    location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)/ {
+        return 404;
+    }
+
+    location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console) {
+        return 404;
+    }
+  
+    location ~ ^/(?:index|remote|public|cron|core/ajax/update|status|ocs/v[12]|updater/.+|ocs-provider/.+|core/templates/40[34])\.php(?:$|/) {
+        fastcgi_split_path_info ^(.+\.php)(/.*)$;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param SCRIPT_NAME $fastcgi_script_name;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+        fastcgi_param HTTPS on;
+        fastcgi_param modHeadersAvailable true;
+        fastcgi_param front_controller_active true;
+        fastcgi_read_timeout 180;
+        fastcgi_pass php-handler;
+        fastcgi_intercept_errors on;
+        fastcgi_request_buffering off; #Available since NGINX 1.7.11
+    }
+  
+    location ~ ^/(?:updater|ocs-provider)(?:$|/) {
+        try_files $uri $uri/ =404;
+        index index.php;
+    }
+  
+    location ~ \.(?:css|js)$ {
+        try_files $uri /index.php$uri$is_args$args;
+        add_header Cache-Control "max-age=15778463";
+        add_header Strict-Transport-Security "max-age=15552000; includeSubDomains";
+        add_header X-Content-Type-Options nosniff;
+        add_header X-Frame-Options "SAMEORIGIN";
+        add_header X-XSS-Protection "1; mode=block";
+        add_header X-Robots-Tag none;
+        add_header X-Download-Options noopen;
+        add_header X-Permitted-Cross-Domain-Policies none;
+        access_log off;
+    }
+
+    location ~ \.(?:svg|gif|png|html|ttf|woff|ico|jpg|jpeg|map)$ {
+        add_header Cache-Control "public, max-age=7200";
+        try_files $uri /index.php$uri$is_args$args;
+        access_log off;
+    }
+}
+
+ and reatart NGINX. With "sudo nano /etc/php/7.3/fpm/php.ini" I adjust upload_max_filesize and 
+post_max_size to 2000M in php.ini file.
+
+With command sudo nano /etc/php/7.3/fpm/pool.d/www.conf I modified www.conf file with content below:
+
+env[HOSTNAME] = $HOSTNAME
+env[PATH] = /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+env[TMP] = /tmp
+env[TMPDIR] = /tmp
+env[TEMP] = /tmp
+ 
+Adding swap Memory allows Raspberry Pi to work further beyond its memory. By making use of space on the storage device and although it is slower
+then RAM it protects from program crashing. "CONF_SWAPSIZE" is modified to 512 in dphys-swapfile file. To set up a MySQL Database (Mariadb) & user
+for Owncloud I have to log in to mysql and create database name "ownclouddb" and user "ownclouduser" with password. Next step is to change to
+directory /var/www/ and download the latest version of Owncloud with command :
+sudo wget https://download.owncloud.org/community/owncloud-latest.tar.bz2 and extracting with command:
+sudo tar -xvf owncloud-latest.tar.bz2.
+ The permission has to be modified by command sudo chown -R www-data:www-data /var/www.
+Now, .user.ini file has to be modified with upload_max_filesize=2000M, post_max_size=2000M, memory_limit=2000M. 
+
+Mounting & setting up a Drive allows Owncloud to store files onto an external hard drive. After installing NTFS pakage and creating /media/ownclouddrive
+we need to get the GID, UID, and the UUID. With these info I will update /etc/fstab file, add line
+ "UUID=E025-37D0 /media/ownclouddrive auto nofail,uid=33,gid=33,umask=0027,dmask=0027,noatime 0 0" at the bottom and reboot.
+
+For Setting up Owncloud I found out IP address of my Raspberry Pi, type it in browser. After getting Owncloud interface I had to create Admin account set
+ data folder /var/www/ownclouddrive and configure the database with database name , user name and password.
+To improve my Owncloud software I need to set up Memory Cashing for Owncloud by configuring Owncloud to make use of APCu and Redis. APCu is used as
+ an object memory cache, and Redis is used to deal with transactional file locking. By adding 
+  'memcache.local' => '\OC\Memcache\APCu',
+  'memcache.locking' => '\OC\Memcache\Redis',
+  'redis' => [
+    'host' => 'localhost',
+    'port' => 6379,
+  ],
+to the file config.php with command sudo nano /var/www/owncloud/config/config.php I will do it. The Owncloud team recommends that I should 
+set System Cron that the operating system runs the scripts cron jobs instead of Ajax. To do it I used command sudo crontab -u www-data -e and add
+*  *  *  *  * /usr/bin/php /var/www/owncloud/occ system:cron line to the file bottom.
+
+To have access to my cloud drive outside my local network, then I will need to setup port forwarding and make a few changes to the config files. 
+If I have a dynamic IP I may want to set up a dynamic DNS and use that as my address. To do this  I open up the Owncloud config file by using 
+the following command sudo nano /var/www/owncloud/config/config.php and add a new item to the trusted domains array (This will be my external IP address).
+   1 => 'xxx.xxx.xxx.xxx',
+Finally update the URL of the overwrite.cli.url line to your IP Address. It should look something like this:
+         'overwrite.cli.url' => 'https://xxx.xxx.xxx.xxx',
+ Make sure when setting up the external port that it isn’t already reserved for a specific program. This allows me to have access to my personal cloud on the go.
+ 
+
+
+
+
+
+

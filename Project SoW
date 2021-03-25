@@ -1,1 +1,69 @@
-SoW
+
+
+
+
+CNA 335 
+Winter 2021
+Final Project 
+                                              Owncloud
+
+
+In this project I am going to make a Raspberry Pi Owncoud server that can act as my very own personal cloud storage.
+I made use of the following equipment for this personal cloud storage setup.
+Recommended:
+* Raspberry Pi
+* SD Card (8GB+) or Micro SD Card if you are using aRpi 2 or B+
+* Ethernet Cord or WiFi dongle
+* External Hard drive or USB Drive
+I have a Raspberry Pi with Raspian (buster) installed. To run the Owncloud software I am going to download a web server (Nginx % PHP) and
+add the www-data user to the www-data group. 
+
+After NGINX installation I needed to sett up and configure it, tweak PHP for Owncloud and HTTPS. I used "sudo nano /etc/nginx/sites-available/default" 
+to configure the web server and restart NGINX. With "sudo nano /etc/php/7.3/fpm/php.ini" I adjust upload_max_filesize and 
+post_max_size to 2000M in php.ini file. 
+I add swap Memory to Raspberry Pi to work further beyond its memory. By making use of space on the storage device and although it is slower
+then RAM it protects from program crashing. "CONF_SWAPSIZE" is modified to 512 in dphys-swapfile file. To set up a MySQL Database (Mariadb) & user
+for Owncloud I have to log in to mysql and create database name "ownclouddb" and user "ownclouduser" with password.
+
+ Next step is to change to directory /var/www/ and download the latest version of Owncloud. The permission has to be modified by command 
+sudo chown -R www-data:www-data /var/www.
+Now, .user.ini file has to be modified with upload_max_filesize=2000M, post_max_size=2000M, memory_limit=2000M. 
+Mounting & setting up a Drive allows Owncloud to store files onto an external hard drive. After installing NTFS pakage and creating /media/ownclouddrive
+we need to get the GID, UID, and the UUID. With these info I will update /etc/fstab file, add line
+ "UUID=E025-37D0 /media/ownclouddrive auto nofail,uid=33,gid=33,umask=0027,dmask=0027,noatime 0 0" at the bottom and reboot.
+
+For Setting up Owncloud I found out IP addre s with command uname -I of my Raspberry Pi and type it in browser. After getting Owncloud interface
+I had to create Admin account setdata folder /var/www/ownclouddrive and configure the database with database name , user name and password.
+To improve my Owncloud software I need to set up Memory Cashing for Owncloud by configuring Owncloud and making use of APCu and Redis. APCu is used as
+ an object memory cache, and Redis is used to deal with transactional file locking. By adding 
+  'memcache.local' => '\OC\Memcache\APCu',
+  'memcache.locking' => '\OC\Memcache\Redis',
+  'redis' => [
+    'host' => 'localhost',
+    'port' => 6379,
+  ],
+to the file config.php with command sudo nano /var/www/owncloud/config/config.php I will do it. The Owncloud team recommends that I should 
+set System Cron that the operating system runs the scripts cron jobs instead of Ajax. To do it I used command sudo crontab -u www-data -e and add
+*  *  *  *  * /usr/bin/php /var/www/owncloud/occ system:cron line to the file bottom.
+
+To have access to my cloud drive outside my local network (cloud on the go) I will need to setup port forwarding and make a few changes to the config files. 
+I have to be sure when setting up the external port that it isn’t already reserved for a specific program.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
